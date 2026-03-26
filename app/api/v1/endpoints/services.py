@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 import math
 
@@ -10,10 +10,19 @@ from app.schemas.pagination import PaginatedResponse
 router = APIRouter(prefix="/services", tags=["services"])
 
 
-@router.get("/", response_model=PaginatedResponse[ServiceResponse])
+@router.get(
+    "/",
+    response_model=PaginatedResponse[ServiceResponse],
+    summary="Получить список услуг",
+    description="Возвращает список всех услуг с поддержкой пагинации. Требуется авторизация.",
+    responses={
+        200: {"description": "Список услуг успешно получен"},
+        401: {"description": "Не авторизован"}
+    }
+)
 def get_services(
-        page: int = Query(1, ge=1),
-        limit: int = Query(10, ge=1, le=100),
+        page: int = Query(1, ge=1, description="Номер страницы"),
+        limit: int = Query(10, ge=1, le=100, description="Количество записей на странице (от 1 до 100)"),
         db: Session = Depends(get_db)
 ):
     services, total = ServiceService.get_services(db, page, limit)
@@ -30,7 +39,17 @@ def get_services(
     )
 
 
-@router.get("/{service_id}", response_model=ServiceResponse)
+@router.get(
+    "/{service_id}",
+    response_model=ServiceResponse,
+    summary="Получить услугу по ID",
+    description="Возвращает услугу по ее идентификатору. Требуется авторизация.",
+    responses={
+        200: {"description": "Услуга найдена"},
+        401: {"description": "Не авторизован"},
+        404: {"description": "Услуга не найдена"}
+    }
+)
 def get_service(service_id: int, db: Session = Depends(get_db)):
     service = ServiceService.get_service(db, service_id)
     if not service:
@@ -38,12 +57,34 @@ def get_service(service_id: int, db: Session = Depends(get_db)):
     return service
 
 
-@router.post("/", response_model=ServiceResponse, status_code=201)
+@router.post(
+    "/",
+    response_model=ServiceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создать услугу",
+    description="Создает новую услугу. Требуется авторизация.",
+    responses={
+        201: {"description": "Услуга успешно создана"},
+        400: {"description": "Неверные данные"},
+        401: {"description": "Не авторизован"}
+    }
+)
 def create_service(service: ServiceCreate, db: Session = Depends(get_db)):
     return ServiceService.create_service(db, service)
 
 
-@router.put("/{service_id}", response_model=ServiceResponse)
+@router.put(
+    "/{service_id}",
+    response_model=ServiceResponse,
+    summary="Полностью обновить услугу",
+    description="Полностью обновляет услугу по ID. Требуется авторизация.",
+    responses={
+        200: {"description": "Услуга обновлена"},
+        401: {"description": "Не авторизован"},
+        403: {"description": "Нет прав на редактирование"},
+        404: {"description": "Услуга не найдена"}
+    }
+)
 def update_service(service_id: int, service: ServiceCreate, db: Session = Depends(get_db)):
     updated = ServiceService.update_service(db, service_id, ServiceUpdate(**service.dict()))
     if not updated:
@@ -51,7 +92,18 @@ def update_service(service_id: int, service: ServiceCreate, db: Session = Depend
     return updated
 
 
-@router.patch("/{service_id}", response_model=ServiceResponse)
+@router.patch(
+    "/{service_id}",
+    response_model=ServiceResponse,
+    summary="Частично обновить услугу",
+    description="Частично обновляет услугу по ID. Требуется авторизация.",
+    responses={
+        200: {"description": "Услуга обновлена"},
+        401: {"description": "Не авторизован"},
+        403: {"description": "Нет прав на редактирование"},
+        404: {"description": "Услуга не найдена"}
+    }
+)
 def patch_service(service_id: int, service: ServiceUpdate, db: Session = Depends(get_db)):
     updated = ServiceService.update_service(db, service_id, service)
     if not updated:
@@ -59,7 +111,18 @@ def patch_service(service_id: int, service: ServiceUpdate, db: Session = Depends
     return updated
 
 
-@router.delete("/{service_id}", status_code=204)
+@router.delete(
+    "/{service_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить услугу",
+    description="Мягкое удаление услуги. Требуется авторизация.",
+    responses={
+        204: {"description": "Услуга удалена"},
+        401: {"description": "Не авторизован"},
+        403: {"description": "Нет прав на удаление"},
+        404: {"description": "Услуга не найдена"}
+    }
+)
 def delete_service(service_id: int, db: Session = Depends(get_db)):
     deleted = ServiceService.soft_delete_service(db, service_id)
     if not deleted:

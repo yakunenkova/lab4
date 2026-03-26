@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, Request, Cookie
+from fastapi import APIRouter, Depends, HTTPException, Response, Request, Cookie, status
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -10,7 +10,17 @@ from app.schemas.user import UserResponse
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserResponse, status_code=201)
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Регистрация нового пользователя",
+    description="Создает нового пользователя с хешированием пароля. Пароль не возвращается в ответе.",
+    responses={
+        201: {"description": "Пользователь успешно создан"},
+        400: {"description": "Email уже зарегистрирован или неверные данные"}
+    }
+)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
     try:
         user = AuthService.register(db, data)
@@ -19,7 +29,16 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/login")
+@router.post(
+    "/login",
+    status_code=status.HTTP_200_OK,
+    summary="Вход в систему",
+    description="Аутентифицирует пользователя и устанавливает HttpOnly cookies с access_token и refresh_token.",
+    responses={
+        200: {"description": "Успешный вход, cookies установлены"},
+        401: {"description": "Неверный email или пароль"}
+    }
+)
 def login(
         response: Response,
         data: LoginRequest,
@@ -50,7 +69,16 @@ def login(
         raise HTTPException(status_code=401, detail=str(e))
 
 
-@router.post("/refresh")
+@router.post(
+    "/refresh",
+    status_code=status.HTTP_200_OK,
+    summary="Обновление токенов",
+    description="Использует refresh_token из cookies для выдачи нового access_token.",
+    responses={
+        200: {"description": "Токен обновлен, новый access_token установлен в cookie"},
+        401: {"description": "Refresh token отсутствует, истек или недействителен"}
+    }
+)
 def refresh(
         response: Response,
         refresh_token: Optional[str] = Cookie(None),
@@ -75,7 +103,16 @@ def refresh(
     return {"message": "Token refreshed"}
 
 
-@router.get("/whoami", response_model=WhoamiResponse)
+@router.get(
+    "/whoami",
+    response_model=WhoamiResponse,
+    summary="Проверка авторизации",
+    description="Возвращает данные текущего авторизованного пользователя. Требует access_token в cookies.",
+    responses={
+        200: {"description": "Пользователь авторизован, возвращены данные"},
+        401: {"description": "Не авторизован, токен отсутствует или недействителен"}
+    }
+)
 def whoami(
         request: Request,
         access_token: Optional[str] = Cookie(None),
@@ -100,7 +137,16 @@ def whoami(
     )
 
 
-@router.post("/logout")
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="Выход из системы",
+    description="Завершает текущую сессию, отзывая refresh_token и удаляя cookies.",
+    responses={
+        200: {"description": "Успешный выход, cookies удалены"},
+        401: {"description": "Не авторизован"}
+    }
+)
 def logout(
         response: Response,
         refresh_token: Optional[str] = Cookie(None),
@@ -115,7 +161,16 @@ def logout(
     return {"message": "Logged out"}
 
 
-@router.post("/logout-all")
+@router.post(
+    "/logout-all",
+    status_code=status.HTTP_200_OK,
+    summary="Выход из всех устройств",
+    description="Отзывает все refresh токены пользователя, завершая все активные сессии.",
+    responses={
+        200: {"description": "Все сессии завершены"},
+        401: {"description": "Не авторизован"}
+    }
+)
 def logout_all(
         response: Response,
         access_token: Optional[str] = Cookie(None),
