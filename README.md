@@ -1,4 +1,4 @@
-# SPA Salon API
+# SPA Salon API — Лабораторная работа №2
 
 RESTful API для управления услугами SPA-салона. Реализовано на FastAPI с использованием PostgreSQL, SQLAlchemy, Alembic.
 
