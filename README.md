@@ -1,101 +1,51 @@
-# SPA Salon API - Лабораторная работа №3
+# SPA Salon API — Лабораторная работа №4
 
-RESTful API для управления услугами SPA-салона с системой аутентификации и авторизации. Реализовано на FastAPI с использованием PostgreSQL, SQLAlchemy, Alembic, JWT, bcrypt.
-
-## Функциональность (дополнение к ЛР №2)
-
-- Регистрация пользователей (хеширование паролей bcrypt)
-- Аутентификация (вход) с выдачей JWT-токенов
-- Access Token (15 минут) и Refresh Token (7 дней)
-- Передача токенов через HttpOnly cookies
-- Обновление пары токенов (refresh)
-- Завершение сессии (logout) и всех сессий (logout-all)
-- Хранение refresh токенов в БД в хешированном виде
-- Эндпоинт `/whoami` для проверки авторизации
-- Защита ресурсов из ЛР №2 (только авторизованные пользователи)
-
-## Эндпоинты аутентификации
-| Метод | Полный URL | Описание |
-|-------|-----------|----------|
-| POST | `http://localhost:8000/api/v1/auth/register` | Регистрация нового пользователя |
-| POST | `http://localhost:8000/api/v1/auth/login` | Вход в систему (установка HttpOnly cookies) |
-| POST | `http://localhost:8000/api/v1/auth/refresh` | Обновление пары токенов (access + refresh) |
-| GET | `http://localhost:8000/api/v1/auth/whoami` | Проверка авторизации и получение данных пользователя |
-| POST | `http://localhost:8000/api/v1/auth/logout` | Завершение текущей сессии |
-| POST | `http://localhost:8000/api/v1/auth/logout-all` | Завершение всех сессий пользователя |
-
-## Примеры запросов
-
-### Регистрация
-```bash
-POST `http://localhost:8000/api/v1/auth/register`
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "full_name": "Иван Петров"
-}
-```
-
-### Логин
-```bash
-POST `http://localhost:8000/api/v1/auth/login`
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-```
-### Проверка авторизации
-```bash
-GET `http://localhost:8000/api/v1/auth/whoami`
-```
-### Обновление токенов
-```bash
-POST `http://localhost:8000/api/v1/auth/refresh`
-```
-### Выход
-```bash
-POST `http://localhost:8000/api/v1/auth/logout`
-```
-### Выход из всех устройств
-```bash
-POST `http://localhost:8000/api/v1/auth/logout-all`
-```
-## Безопасность
-
-| Механизм | Реализация |
-|----------|------------|
-| Хеширование паролей | bcrypt с уникальной солью |
-| Хранение токенов в БД | token_hash (bcrypt) |
-| Передача токенов | HttpOnly cookies (защита от XSS) |
-| Отзыв токенов | is_revoked в таблице refresh_tokens |
-| Access Token | 15 минут |
-| Refresh Token | 7 дней |
+Автоматизированное документирование REST API с использованием OpenAPI (Swagger)
 
 ---
 
-## Модели данных
+## Краткое описание
 
-### User (пользователь)
+RESTful API для управления услугами SPA-салона с системой аутентификации и авторизации. В рамках лабораторной работы настроена автоматическая документация API на основе спецификации OpenAPI с использованием встроенных средств FastAPI. Реализовано условное отключение документации в production-среде, аннотирование контроллеров и DTO, настройка схемы безопасности для JWT-токенов в HttpOnly cookies.
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| id | Integer | Уникальный идентификатор |
-| email | String | Email пользователя (уникальный) |
-| password_hash | String | Хеш пароля (bcrypt) |
-| full_name | String | Полное имя |
-| phone | String | Телефон (опционально) |
-| is_active | Boolean | Активен ли пользователь |
-| created_at | DateTime | Дата регистрации |
+---
 
-### RefreshToken (токен обновления)
+## Функциональность (дополнение к ЛР №2 и ЛР №3)
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| id | Integer | Уникальный идентификатор |
-| user_id | Integer | Внешний ключ к пользователю |
-| token_hash | String | Хеш refresh токена (bcrypt) |
-| expires_at | DateTime | Срок действия |
-| is_revoked | Boolean | Отозван ли токен |
+- Автоматическая генерация документации OpenAPI (Swagger UI, ReDoc)
+- Условное отключение документации в production (по переменной `ENVIRONMENT`)
+- Аннотирование эндпоинтов (summary, description, responses)
+- Документирование DTO с описаниями полей и примерами
+- Настройка схемы безопасности для HttpOnly cookies
+- Маркировка защищенных эндпоинтов значком замка
+- Тестирование защищенных эндпоинтов через Swagger UI
+
+---
+
+## Эндпоинты документации
+
+| Метод | URL | Описание |
+|-------|-----|----------|
+| GET | `http://localhost:8000/docs` | Swagger UI (интерактивная документация) |
+| GET | `http://localhost:8000/redoc` | ReDoc (альтернативный интерфейс) |
+| GET | `http://localhost:8000/openapi.json` | OpenAPI спецификация в формате JSON |
+
+---
+
+## Настройка документации
+
+### Условное отключение в production
+
+В файле `app/main.py` добавлена проверка переменной `ENVIRONMENT`:
+
+```python
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+if ENVIRONMENT == "production":
+    app.docs_url = None
+    app.redoc_url = None
+    app.openapi_url = None
+```
 ## Переменные окружения
 
 Создайте файл `.env` в корне проекта и скопируйте в него содержимое `.env.example`:
@@ -124,12 +74,13 @@ YANDEX_CLIENT_ID=
 YANDEX_CLIENT_SECRET=
 YANDEX_REDIRECT_URI=http://localhost:8000/api/v1/auth/oauth/yandex/callback
 ```
+
 ## Запуск проекта
 
 ### 1. Клонируйте репозиторий
 ```bash
-git clone https://github.com/yakunenkova/lab3.git
-cd lab3
+git clone https://github.com/yakunenkova/lab4.git
+cd lab4
 ```
 ### 2. Создайте файл переменных окружения
 ```bash
@@ -141,4 +92,4 @@ docker-compose up --build
 ```
 ## Автор
 **Студент:** Якуненкова Полина
-**Группа:** 020303-АИСа-о23 
+**Группа:** 020303-АИСа-о23
