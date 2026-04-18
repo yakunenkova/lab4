@@ -1,24 +1,92 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, Cookie, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import Optional
+import secrets
 
 from app.core.database import get_db
 from app.services.auth_service import AuthService
 from app.schemas.auth import LoginRequest, RegisterRequest, WhoamiResponse
 from app.schemas.user import UserResponse
 
+print("=== AUTH.PY ЗАГРУЖЕН ===")
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+# ==================== ТЕСТОВЫЙ ЭНДПОИНТ ====================
+@router.get("/test")
+async def test():
+    return {"message": "test works"}
+
+
+# ==================== OAuth Yandex ====================
+@router.get("/oauth/yandex")
+async def oauth_yandex_login(request: Request):
+    """Инициация входа через Яндекс"""
+    client_id = "2d625c05258d4ca0ac07c74f0d6f6954"
+    redirect_uri = "http://localhost:8000/api/v1/auth/oauth/yandex/callback"
+    state = secrets.token_urlsafe(16)
+
+    print(f"=== OAUTH LOGIN ===")
+    print(f"Generated state: {state}")
+
+    request.session["oauth_state"] = state
+
+    auth_url = f"https://oauth.yandex.ru/authorize?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}"
+    print(f"Redirect URL: {auth_url}")
+    return RedirectResponse(url=auth_url)
+
+
+@router.get("/oauth/yandex/callback")
+async def oauth_yandex_callback(
+    request: Request,
+    response: Response,
+    code: str = None,
+    state: str = None,
+    db: Session = Depends(get_db)
+):
+    """Обработка callback от Яндекса"""
+    print("=== CALLBACK HIT ===")
+    print(f"code = {code}, state = {state}")
+
+    if not code:
+        raise HTTPException(status_code=400, detail="No code provided")
+
+    saved_state = request.session.get("oauth_state")
+    print(f"saved_state = {saved_state}")
+
+    if not saved_state or saved_state != state:
+        print(f"❌ State mismatch: saved={saved_state}, received={state}")
+        raise HTTPException(status_code=400, detail="Invalid state")
+
+    request.session.pop("oauth_state", None)
+
+    print("✅ State OK, calling handle_yandex_oauth...")
+
+    # Полная обработка OAuth
+    result = await AuthService.handle_yandex_oauth(db, code, response)
+
+    print(f"✅ OAuth успешен: {result}")
+
+    # Возвращаем JSON с данными (для отладки)
+    return {
+        "success": True,
+        "user": result["user"],
+        "message": "OAuth successful, cookies set"
+    }
+
+
+# ==================== Регистрация ====================
 @router.post(
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Регистрация нового пользователя",
-    description="Создает нового пользователя с хешированием пароля. Пароль не возвращается в ответе.",
+    description="Создает нового пользователя с хешированием пароля.",
     responses={
         201: {"description": "Пользователь успешно создан"},
-        400: {"description": "Email уже зарегистрирован или неверные данные"}
+        400: {"description": "Email уже зарегистрирован"}
     }
 )
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
@@ -29,21 +97,18 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ==================== Логин ====================
 @router.post(
     "/login",
     status_code=status.HTTP_200_OK,
     summary="Вход в систему",
-    description="Аутентифицирует пользователя и устанавливает HttpOnly cookies с access_token и refresh_token.",
+    description="Аутентифицирует пользователя и устанавливает HttpOnly cookies.",
     responses={
         200: {"description": "Успешный вход, cookies установлены"},
         401: {"description": "Неверный email или пароль"}
     }
 )
-def login(
-        response: Response,
-        data: LoginRequest,
-        db: Session = Depends(get_db)
-):
+def login(response: Response, data: LoginRequest, db: Session = Depends(get_db)):
     try:
         user, access_token, refresh_token = AuthService.login(db, data)
 
@@ -69,6 +134,7 @@ def login(
         raise HTTPException(status_code=401, detail=str(e))
 
 
+# ==================== Обновление токенов ====================
 @router.post(
     "/refresh",
     status_code=status.HTTP_200_OK,
@@ -80,9 +146,9 @@ def login(
     }
 )
 def refresh(
-        response: Response,
-        refresh_token: Optional[str] = Cookie(None),
-        db: Session = Depends(get_db)
+    response: Response,
+    refresh_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
 ):
     if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token")
@@ -103,6 +169,7 @@ def refresh(
     return {"message": "Token refreshed"}
 
 
+# ==================== Whoami ====================
 @router.get(
     "/whoami",
     response_model=WhoamiResponse,
@@ -114,9 +181,8 @@ def refresh(
     }
 )
 def whoami(
-        request: Request,
-        access_token: Optional[str] = Cookie(None),
-        db: Session = Depends(get_db)
+    access_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
 ):
     if not access_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -137,6 +203,7 @@ def whoami(
     )
 
 
+# ==================== Logout ====================
 @router.post(
     "/logout",
     status_code=status.HTTP_200_OK,
@@ -148,9 +215,9 @@ def whoami(
     }
 )
 def logout(
-        response: Response,
-        refresh_token: Optional[str] = Cookie(None),
-        db: Session = Depends(get_db)
+    response: Response,
+    refresh_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
 ):
     if refresh_token:
         AuthService.logout(db, refresh_token)
@@ -161,6 +228,7 @@ def logout(
     return {"message": "Logged out"}
 
 
+# ==================== Logout-all ====================
 @router.post(
     "/logout-all",
     status_code=status.HTTP_200_OK,
@@ -172,9 +240,9 @@ def logout(
     }
 )
 def logout_all(
-        response: Response,
-        access_token: Optional[str] = Cookie(None),
-        db: Session = Depends(get_db)
+    response: Response,
+    access_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
 ):
     if not access_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
